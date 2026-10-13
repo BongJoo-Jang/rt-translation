@@ -1,0 +1,695 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<title>BJ 통역</title>
+<meta name="description" content="영어↔한국어 대면 대화 통역 (실시간 듣기 + 한국어 입력 번역)">
+<meta name="theme-color" content="#2563eb">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="BJ 통역">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<style>
+:root {
+  --bg: #f4f6fa;
+  --panel: #ffffff;
+  --panel2: #eef2f8;
+  --text: #111827;
+  --muted: #6b7280;
+  --line: #d9dee7;
+  --accent: #2563eb;
+  --accent-ink: #ffffff;
+  --accent-soft: #e6eefe;
+  --danger: #dc2626;
+  --ok: #16a34a;
+  --pending: #374151;
+  --shadow: 0 1px 2px rgba(0,0,0,.06), 0 4px 16px rgba(0,0,0,.05);
+  --fs: 22px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b0f17; --panel: #121826; --panel2: #182033; --text: #eef1f6; --muted: #98a2b3;
+    --line: #273149; --accent: #4f8cff; --accent-soft: #1b2a4a; --pending: #c4cad6;
+    --shadow: 0 1px 2px rgba(0,0,0,.4);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0b0f17; --panel: #121826; --panel2: #182033; --text: #eef1f6; --muted: #98a2b3;
+  --line: #273149; --accent: #4f8cff; --accent-soft: #1b2a4a; --pending: #c4cad6;
+  --shadow: 0 1px 2px rgba(0,0,0,.4);
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+[hidden] { display: none !important; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "Segoe UI", sans-serif;
+  height: 100dvh; display: flex; flex-direction: column; overflow: hidden;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+button { font: inherit; color: inherit; }
+.icon-btn {
+  border: 1px solid var(--line); background: var(--panel); border-radius: 10px;
+  min-width: 40px; height: 40px; padding: 0 10px; display: inline-flex; align-items: center; justify-content: center;
+  gap: 6px; cursor: pointer; font-size: 15px;
+}
+.icon-btn:disabled { opacity: .4; cursor: default; }
+.icon-btn svg { width: 20px; height: 20px; }
+.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+.primary.stop { background: var(--danger); border-color: var(--danger); }
+
+/* 상단 바 */
+header {
+  display: flex; align-items: center; gap: 10px; padding: 8px 14px;
+  background: var(--panel); border-bottom: 1px solid var(--line);
+}
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 17px; }
+.brand img { width: 26px; height: 26px; border-radius: 7px; }
+header .spacer { flex: 1; }
+
+main { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.panel { display: flex; flex-direction: column; min-height: 0; }
+.panel-head { display: flex; align-items: center; gap: 8px; padding: 10px 14px; flex-wrap: wrap; }
+.panel-title { font-weight: 700; font-size: 16px; }
+.dir { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; }
+.status { font-size: 13px; color: var(--muted); flex: 1; min-width: 80px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--line); flex: none; }
+.dot.on { background: var(--ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 20%, transparent); }
+.dot.paused { background: var(--muted); }
+
+/* 위: 듣기 */
+#listen { flex: 0 0 var(--split, 55%); background: var(--panel); }
+#lines { flex: 1; overflow-y: auto; padding: 4px 16px 20px; scroll-behavior: smooth; }
+.empty { color: var(--muted); text-align: center; margin-top: 28px; line-height: 1.6; padding: 0 12px; }
+.line { padding: 10px 0; border-bottom: 1px dashed var(--line); }
+.line:last-child { border-bottom: none; }
+.en { color: var(--muted); font-size: calc(var(--fs) * .62); line-height: 1.4; margin-bottom: 3px; }
+.ko { font-size: var(--fs); font-weight: 650; line-height: 1.45; }
+.line.pending .ko { color: var(--pending); opacity: .8; }
+.hide-en .en { display: none; }
+
+/* 아래: 말하기 */
+#speak { flex: 1; background: var(--panel2); border-top: 1px solid var(--line); padding-bottom: 10px; }
+#outWrap { flex: 1; min-height: 64px; margin: 0 14px; background: var(--accent-soft); border-radius: 14px; overflow-y: auto; transition: transform .25s ease; }
+#outWrap.flipped { transform: rotate(180deg); }
+#out { padding: 14px 16px; font-size: calc(var(--fs) * 1.15); font-weight: 650; line-height: 1.45; white-space: pre-wrap; user-select: text; }
+#out.placeholder { color: var(--muted); font-weight: 500; font-size: 17px; }
+#err { color: var(--danger); font-size: 13px; padding: 6px 16px 0; min-height: 0; }
+.inputRow { display: flex; gap: 8px; align-items: flex-end; padding: 10px 14px 0; }
+#ko {
+  flex: 1; resize: none; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--text);
+  padding: 10px 12px; font: inherit; font-size: max(17px, calc(var(--fs) * .8)); line-height: 1.4; max-height: 30vh;
+}
+#ko:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
+.send { width: 46px; height: 46px; border-radius: 50%; border: none; background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; flex: none; }
+.send:disabled { opacity: .35; }
+.send svg { width: 22px; height: 22px; }
+.spin { width: 16px; height: 16px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: s 0.8s linear infinite; display: none; }
+.busy .spin { display: inline-block; }
+@keyframes s { to { transform: rotate(360deg); } }
+
+/* 크게 보기 */
+#big { position: fixed; inset: 0; background: #000; color: #fff; display: none; align-items: center; justify-content: center; z-index: 50; padding: 30px; }
+#big.show { display: flex; }
+#bigText { max-width: calc(100vw - 60px); overflow-wrap: anywhere; font-weight: 800; text-align: center; line-height: 1.3; transition: transform .25s; }
+#big.flipped #bigText { transform: rotate(180deg); }
+#bigFlip { position: fixed; right: 20px; bottom: calc(20px + env(safe-area-inset-bottom)); background: rgba(255,255,255,.15); color: #fff; border: none; border-radius: 50%; width: 56px; height: 56px; }
+#bigFlip svg { width: 28px; height: 28px; }
+
+/* 설정 */
+dialog { border: none; border-radius: 16px; padding: 0; width: min(560px, calc(100vw - 24px)); max-height: calc(100dvh - 40px); background: var(--panel); color: var(--text); box-shadow: 0 20px 60px rgba(0,0,0,.35); }
+dialog::backdrop { background: rgba(0,0,0,.45); }
+.dlg-head { position: sticky; top: 0; background: var(--panel); display: flex; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--line); z-index: 1; }
+.dlg-head h2 { margin: 0; font-size: 18px; flex: 1; }
+.dlg-body { padding: 6px 18px 20px; overflow-y: auto; }
+fieldset { border: 1px solid var(--line); border-radius: 12px; margin: 14px 0 0; padding: 10px 14px 12px; }
+legend { font-weight: 700; padding: 0 6px; }
+label.row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; font-size: 15px; }
+label.col { display: flex; flex-direction: column; gap: 6px; padding: 8px 0; font-size: 15px; }
+input[type=text], input[type=password], select, textarea.cfg {
+  font: inherit; font-size: 16px; padding: 9px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel2); color: var(--text); width: 100%;
+}
+input[type=range] { width: 100%; accent-color: var(--accent); }
+input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--accent); flex: none; }
+.hint { font-size: 12.5px; color: var(--muted); line-height: 1.5; margin: 4px 0 0; }
+.keyok { color: var(--ok); font-size: 13px; }
+.btnrow { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+
+@media (max-width: 480px) {
+  .dir { display: none; }
+  .panel-head { gap: 6px; padding: 8px 12px; }
+  #listen .panel-head { flex-wrap: nowrap; }
+}
+@media (min-width: 900px) and (orientation: landscape) {
+  #lines, #outWrap { font-size: 1.05em; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><img src="apple-touch-icon.png" alt=""><span>BJ 통역</span></div>
+  <div class="spacer"></div>
+  <button class="icon-btn" id="exportBtn" title="대화 기록 내보내기" aria-label="대화 기록 내보내기">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 8 5-5 5 5"/><path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></svg>
+  </button>
+  <button class="icon-btn" id="settingsBtn" title="설정" aria-label="설정">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+  </button>
+</header>
+
+<main>
+  <!-- 위: 상대방 영어 → 한국어 -->
+  <section class="panel" id="listen">
+    <div class="panel-head">
+      <span class="dot" id="dot"></span>
+      <span class="panel-title">상대방</span><span class="dir">영어 → 한국어</span>
+      <span class="status" id="status">대기 중</span>
+      <button class="icon-btn" id="pauseBtn" hidden aria-label="일시정지">
+        <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+      </button>
+      <button class="icon-btn primary" id="startBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>
+        <span>듣기 시작</span>
+      </button>
+    </div>
+    <div id="lines"><div class="empty" id="empty">‘듣기 시작’을 누르면 상대방의 영어를 듣고<br>한국어로 보여줍니다.</div></div>
+  </section>
+
+  <!-- 아래: 내 한국어 → 영어 -->
+  <section class="panel" id="speak">
+    <div class="panel-head">
+      <span class="panel-title">나</span><span class="dir">한국어 → 영어</span><span class="spin"></span>
+      <span class="status"></span>
+      <button class="icon-btn" id="flipBtn" title="영어 결과 뒤집기 (마주 앉은 상대용)" aria-label="영어 결과 뒤집기">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 15-4 4 4 4" transform="translate(0 -4)"/><path d="M3 15h13a5 5 0 0 0 0-10H9"/></svg>
+      </button>
+      <button class="icon-btn" id="bigBtn" title="크게 보기" aria-label="크게 보기" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="m21 3-7 7"/><path d="m3 21 7-7"/></svg>
+      </button>
+      <button class="icon-btn" id="speakBtn" title="영어 읽어주기" aria-label="영어 읽어주기" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/></svg>
+      </button>
+    </div>
+    <div id="outWrap"><div id="out" class="placeholder">여기에 영어 번역이 표시됩니다.</div></div>
+    <div id="err"></div>
+    <div class="inputRow">
+      <textarea id="ko" rows="1" placeholder="한국어로 입력하세요 (키보드 🎤 받아쓰기 가능)" enterkeyhint="send" autocomplete="off"></textarea>
+      <button class="send" id="sendBtn" aria-label="번역" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
+      </button>
+    </div>
+  </section>
+</main>
+
+<div id="big" role="dialog" aria-label="영어 크게 보기">
+  <div id="bigText"></div>
+  <button id="bigFlip" aria-label="뒤집기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 15h13a5 5 0 0 0 0-10H9"/><path d="m7 11-4 4 4 4"/></svg></button>
+</div>
+
+<dialog id="settings">
+  <div class="dlg-head"><h2>설정</h2><button class="icon-btn" id="closeSettings">완료</button></div>
+  <div class="dlg-body">
+    <fieldset>
+      <legend>OpenAI API 키</legend>
+      <label class="col"><input type="password" id="apiKey" placeholder="sk-..." autocomplete="off" spellcheck="false"></label>
+      <div class="btnrow"><button class="icon-btn primary" id="saveKey">키 저장</button><button class="icon-btn" id="delKey">삭제</button><span class="keyok" id="keyState"></span></div>
+      <p class="hint">이 기기의 이 브라우저에만 저장되고, OpenAI로만 전송됩니다. 기기마다 한 번씩 입력하세요. OpenAI 대시보드에서 ‘web-interpreter’처럼 별도 키를 만들면 사용량을 구분하고 언제든 폐기할 수 있습니다.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>화면</legend>
+      <label class="col">글자 크기 <span id="fsVal"></span><input type="range" id="fs" min="14" max="48" step="1"></label>
+      <label class="col">위 창 비율 <span id="splitVal"></span><input type="range" id="split" min="30" max="75" step="5"></label>
+      <label class="row">영어 원문 함께 표시 <input type="checkbox" id="showEn"></label>
+      <label class="row">테마
+        <select id="theme" style="width:auto"><option value="auto">시스템</option><option value="light">밝게</option><option value="dark">어둡게</option></select>
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>상대방 듣기 (영→한)</legend>
+      <label class="row">소음 억제
+        <select id="nr" style="width:auto">
+          <option value="far_field">회의실·책상 위</option>
+          <option value="near_field">헤드셋·가까운 마이크</option>
+          <option value="off">끄기</option>
+        </select>
+      </label>
+      <label class="row">내 한국어 말은 위 창에서 숨기기 <input type="checkbox" id="dropKo"></label>
+      <label class="row">번역 음성 듣기 (이어폰 권장) <input type="checkbox" id="playVoice"></label>
+      <label class="col">줄바꿈 대기 <span id="pauseVal"></span><input type="range" id="pauseS" min="0.6" max="3" step="0.1"></label>
+      <p class="hint">듣는 동안 1분당 약 $0.034(1시간 약 $2)가 청구되며, 일시정지 중에도 연결이 유지되면 청구됩니다. 다 쓰면 ‘정지’를 누르세요.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>내 말 번역 (한→영)</legend>
+      <label class="row">입력을 멈추면 자동 번역 <input type="checkbox" id="autoTr"></label>
+      <label class="col">회의 설명 (선택)
+        <textarea class="cfg" id="ctx" rows="3" placeholder="예: 지하차도 침수 모니터링 국제 공동연구. 지하차도 = underpass, 수위 = water level"></textarea>
+      </label>
+      <p class="hint">주제·참석자·전문용어를 적어 두면 영어 번역에 반영됩니다. 문장당 비용은 1원 미만 수준입니다.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>모델 (고급)</legend>
+      <label class="col">실시간 번역 모델<input type="text" id="mRt" spellcheck="false" autocapitalize="off"></label>
+      <label class="col">원문 전사 모델 (비우면 영어 원문 없음)<input type="text" id="mStt" spellcheck="false" autocapitalize="off"></label>
+      <label class="col">텍스트 번역 모델<input type="text" id="mTxt" spellcheck="false" autocapitalize="off"></label>
+      <p class="hint">모델을 찾을 수 없다는 오류가 나면 OpenAI 대시보드의 Limits 화면에서 사용 가능한 이름을 확인해 바꾸세요.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>기록</legend>
+      <div class="btnrow">
+        <button class="icon-btn" id="saveTxt">대화 기록 .txt 저장</button>
+        <button class="icon-btn" id="clearAll" style="color:var(--danger)">기록 모두 지우기</button>
+      </div>
+    </fieldset>
+  </div>
+</dialog>
+
+<audio id="remoteAudio" autoplay playsinline></audio>
+
+<script>
+"use strict";
+// ─────────────────────────────────────────────────────────────
+// 설정 (브라우저 저장소 — 실패해도 기본값으로 동작)
+// ─────────────────────────────────────────────────────────────
+const DEFAULTS = {
+  fs: 22, split: 55, showEn: true, theme: "auto",
+  nr: "far_field", dropKo: true, playVoice: false, pauseS: 1.2,
+  autoTr: true, ctx: "",
+  mRt: "gpt-realtime-translate", mStt: "gpt-realtime-whisper", mTxt: "gpt-5-mini",
+};
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("bj." + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("bj." + k, JSON.stringify(v)); } catch {} },
+  del(k) { try { localStorage.removeItem("bj." + k); } catch {} },
+};
+const S = {};
+for (const k in DEFAULTS) S[k] = store.get(k, DEFAULTS[k]);
+let API_KEY = store.get("apiKey", "");
+
+const $ = (id) => document.getElementById(id);
+const root = document.documentElement;
+
+function applyView() {
+  root.style.setProperty("--fs", S.fs + "px");
+  root.style.setProperty("--split", S.split + "%");
+  $("lines").classList.toggle("hide-en", !S.showEn);
+  if (S.theme === "auto") root.removeAttribute("data-theme"); else root.setAttribute("data-theme", S.theme);
+  $("remoteAudio").muted = !S.playVoice;
+}
+
+// ─────────────────────────────────────────────────────────────
+// 위 창: 실시간 통역 (WebRTC → OpenAI gpt-realtime-translate)
+// ─────────────────────────────────────────────────────────────
+const lines = [];          // {id, en, ko, final, t}
+let cur = null;            // 진행 중인 줄
+let nextId = 1;
+let running = false, paused = false, ttsMute = false;
+let pc = null, dc = null, micStream = null, wakeLock = null, breakTimer = null, reconnecting = false;
+
+function hangulRatio(s) {
+  const letters = [...s].filter(c => /\p{L}/u.test(c));
+  if (!letters.length) return 0;
+  return letters.filter(c => /[가-힣ㄱ-ㆎ]/.test(c)).length / letters.length;
+}
+
+function setStatus(t) { $("status").textContent = t; }
+function updateControls() {
+  $("dot").className = "dot" + (running ? (paused ? " paused" : " on") : "");
+  const b = $("startBtn");
+  b.classList.toggle("stop", running);
+  b.querySelector("span").textContent = running ? "정지" : "듣기 시작";
+  $("pauseBtn").hidden = !running;
+  $("pauseBtn").innerHTML = paused
+    ? '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5v14l12-7z"/></svg>'
+    : '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>';
+  $("pauseBtn").setAttribute("aria-label", paused ? "재개" : "일시정지");
+}
+function applyMicMute() {
+  if (micStream) micStream.getAudioTracks().forEach(t => t.enabled = !(paused || ttsMute));
+}
+
+function renderLine(l) {
+  let el = document.getElementById("l" + l.id);
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "l" + l.id;
+    el.className = "line";
+    el.innerHTML = '<div class="en"></div><div class="ko"></div>';
+    $("lines").appendChild(el);
+    $("empty").hidden = true;
+  }
+  el.classList.toggle("pending", !l.final);
+  el.querySelector(".en").textContent = l.en;
+  el.querySelector(".ko").textContent = l.ko || "번역 중…";
+  const box = $("lines");
+  if (box.scrollHeight - box.scrollTop - box.clientHeight < 160) box.scrollTop = box.scrollHeight;
+}
+
+function emit(final) {
+  if (!cur) return;
+  const en = cur.en.trim(), ko = cur.ko.trim();
+  if (S.dropKo && en.length >= 2 && hangulRatio(en) > 0.5) {    // 내 한국어 말은 숨김
+    if (cur.shown) { document.getElementById("l" + cur.id)?.remove(); const i = lines.findIndex(x => x.id === cur.id); if (i >= 0) lines.splice(i, 1); cur.shown = false; }
+    return;
+  }
+  if (!en && !ko) return;
+  let l = lines.find(x => x.id === cur.id);
+  if (!l) { l = { id: cur.id, en: "", ko: "", final: false, t: new Date() }; lines.push(l); }
+  l.en = en; l.ko = ko; l.final = final;
+  cur.shown = true;
+  renderLine(l);
+}
+function newCur() { cur = { id: nextId++, en: "", ko: "", last: Date.now(), shown: false }; }
+function finalizeLine() {
+  if (cur && (cur.en.trim() || cur.ko.trim())) emit(true);
+  cur = null;
+}
+
+function onEvent(ev) {
+  const t = ev.type || "";
+  if (t === "session.input_transcript.delta") {
+    if (!cur) newCur();
+    cur.en += ev.delta || ""; cur.last = Date.now(); emit(false);
+  } else if (t === "session.output_transcript.delta") {
+    if (!cur) newCur();
+    const d = ev.delta || "";
+    cur.ko += d; cur.last = Date.now(); emit(false);
+    const ko = cur.ko.trim();
+    if (ko.length >= 6 && /[.?!。…]$/.test(ko)) finalizeLine();
+    else if (ko.length >= 80 && (/[ ,]$/.test(d))) finalizeLine();
+  } else if (t.includes("error")) {
+    const msg = (ev.error && ev.error.message) || JSON.stringify(ev).slice(0, 140);
+    setStatus("API 오류: " + msg);
+  }
+}
+
+async function mintSecret(withInput) {
+  const audio = { output: { language: "ko" } };
+  if (withInput) {
+    audio.input = {};
+    if (S.mStt) audio.input.transcription = { model: S.mStt };
+    audio.input.noise_reduction = S.nr === "off" ? null : { type: S.nr };
+  }
+  const r = await fetch("https://api.openai.com/v1/realtime/translations/client_secrets", {
+    method: "POST",
+    headers: { "Authorization": "Bearer " + API_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({ session: { model: S.mRt, audio } }),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error((j.error && j.error.message) || ("HTTP " + r.status));
+  const v = j.value || (j.client_secret && j.client_secret.value);
+  if (!v) throw new Error("임시 키를 받지 못했습니다");
+  return v;
+}
+
+async function connect() {
+  let secret, note = "";
+  try { secret = await mintSecret(true); }
+  catch (e) {   // 원문 전사/소음 억제 설정이 거부되면 번역만으로 연결
+    secret = await mintSecret(false);
+    note = " (원문 전사 없이 연결: " + e.message + ")";
+  }
+  pc = new RTCPeerConnection();
+  micStream.getAudioTracks().forEach(t => pc.addTrack(t, micStream));
+  pc.ontrack = (e) => { $("remoteAudio").srcObject = e.streams[0]; };
+  dc = pc.createDataChannel("oai-events");
+  dc.onmessage = (m) => { try { onEvent(JSON.parse(m.data)); } catch {} };
+  pc.onconnectionstatechange = () => {
+    const st = pc && pc.connectionState;
+    if (!running || !st) return;
+    if (st === "connected") setStatus(paused ? "일시정지 (요금은 계속 청구됨)" : "듣는 중" + note);
+    if (st === "failed" || st === "disconnected") reconnect();
+  };
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  const r = await fetch("https://api.openai.com/v1/realtime/translations/calls", {
+    method: "POST",
+    headers: { "Authorization": "Bearer " + secret, "Content-Type": "application/sdp" },
+    body: offer.sdp,
+  });
+  if (!r.ok) throw new Error("연결 실패: HTTP " + r.status + " " + (await r.text()).slice(0, 160));
+  await pc.setRemoteDescription({ type: "answer", sdp: await r.text() });
+  setStatus("연결 중…" + note);
+}
+
+function closePeer() {
+  try { dc && dc.close(); } catch {}
+  try { pc && pc.close(); } catch {}
+  pc = null; dc = null;
+}
+
+async function reconnect() {
+  if (reconnecting || !running) return;
+  reconnecting = true;
+  finalizeLine();
+  setStatus("연결 끊김, 재연결 중…");
+  closePeer();
+  await new Promise(r => setTimeout(r, 1500));
+  try { if (running) await connect(); }
+  catch (e) { setStatus("재연결 실패: " + e.message); }
+  reconnecting = false;
+}
+
+async function startListening() {
+  if (running) return;
+  if (!API_KEY) { openSettings(); setStatus("먼저 설정에서 API 키를 입력하세요"); return; }
+  setStatus("마이크 준비 중…");
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
+    });
+  } catch (e) {
+    setStatus("마이크 권한이 필요합니다 (" + e.name + ")");
+    return;
+  }
+  running = true; paused = false; ttsMute = false;
+  updateControls(); applyMicMute();
+  try { await connect(); }
+  catch (e) { setStatus(e.message); stopListening(true); return; }
+  try { if ("wakeLock" in navigator) wakeLock = await navigator.wakeLock.request("screen"); } catch {}
+  breakTimer = setInterval(() => {
+    if (cur && (cur.en || cur.ko) && Date.now() - cur.last > S.pauseS * 1000) finalizeLine();
+  }, 300);
+}
+
+function stopListening(keepStatus) {
+  running = false; paused = false;
+  finalizeLine();
+  closePeer();
+  if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+  clearInterval(breakTimer); breakTimer = null;
+  try { wakeLock && wakeLock.release(); } catch {}
+  wakeLock = null;
+  updateControls();
+  if (!keepStatus) setStatus("정지됨");
+}
+
+$("startBtn").onclick = () => running ? stopListening() : startListening();
+$("pauseBtn").onclick = () => {
+  paused = !paused; applyMicMute(); updateControls();
+  setStatus(paused ? "일시정지 (요금은 계속 청구됨)" : "듣는 중");
+};
+// 화면이 다시 보이면 화면 꺼짐 방지 재요청 (iOS는 백그라운드에서 해제됨)
+document.addEventListener("visibilitychange", async () => {
+  if (document.visibilityState === "visible" && running && "wakeLock" in navigator) {
+    try { wakeLock = await navigator.wakeLock.request("screen"); } catch {}
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// 아래 창: 한국어 → 영어 (Chat Completions)
+// ─────────────────────────────────────────────────────────────
+const mine = [];   // {ko, en, t}
+let lastTranslated = "", debounce = null, inflight = null;
+
+function recentEnglish() { return lines.slice(-5).map(l => l.en).filter(Boolean); }
+
+async function translateKo() {
+  const ko = $("ko").value.trim();
+  if (!ko || ko === lastTranslated) return;
+  if (!API_KEY) { openSettings(); return; }
+  if (inflight) inflight.abort();
+  const ctrl = new AbortController(); inflight = ctrl;
+  $("speak").classList.add("busy"); $("err").textContent = "";
+
+  let system = "You translate the user's Korean into natural, concise spoken English for a live conversation. " +
+    "The English is shown on screen to an English-speaking partner, so keep it clear and polite. " +
+    "Output ONLY the English translation, no notes or quotes. Keep names, numbers and units exact.";
+  if (S.ctx.trim()) system += "\nMeeting context: " + S.ctx.trim();
+  const rec = recentEnglish();
+  if (rec.length) system += "\nWhat the partner said recently (context only):\n" + rec.join("\n");
+  const body = { model: S.mTxt, messages: [{ role: "system", content: system }, { role: "user", content: ko }] };
+  if (/^gpt-5/.test(S.mTxt)) body.reasoning_effort = "minimal";
+
+  try {
+    const r = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST", signal: ctrl.signal,
+      headers: { "Authorization": "Bearer " + API_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error((j.error && j.error.message) || ("HTTP " + r.status));
+    const en = ((j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || "").trim();
+    if (!en) throw new Error("번역 결과가 비어 있습니다");
+    showOut(en);
+    lastTranslated = ko;
+    mine.push({ ko, en, t: new Date() });
+  } catch (e) {
+    if (e.name !== "AbortError") $("err").textContent = "번역 오류: " + e.message;
+  } finally {
+    if (inflight === ctrl) { inflight = null; $("speak").classList.remove("busy"); }
+  }
+}
+
+function showOut(en) {
+  const o = $("out");
+  o.textContent = en; o.classList.remove("placeholder");
+  $("bigBtn").disabled = $("speakBtn").disabled = false;
+}
+
+function autoGrow() { const t = $("ko"); t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, innerHeight * 0.3) + "px"; }
+$("ko").addEventListener("input", () => {
+  autoGrow();
+  $("sendBtn").disabled = !$("ko").value.trim();
+  clearTimeout(debounce);
+  if (S.autoTr) debounce = setTimeout(translateKo, 1100);
+});
+$("ko").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); clearTimeout(debounce); translateKo(); }
+});
+$("sendBtn").onclick = () => { clearTimeout(debounce); translateKo(); };
+
+// 뒤집기 / 크게 보기
+let flipped = false;
+$("flipBtn").onclick = () => { flipped = !flipped; $("outWrap").classList.toggle("flipped", flipped); };
+$("bigBtn").onclick = () => {
+  const txt = $("out").textContent;
+  $("bigText").textContent = txt;
+  $("big").classList.toggle("flipped", flipped);
+  $("big").classList.add("show");
+  fitBig();
+};
+function fitBig() {   // 화면에 꽉 차도록 글자 크기 자동 조절
+  const t = $("bigText"), maxW = innerWidth - 60, maxH = innerHeight - 120;
+  let lo = 20, hi = 120;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    t.style.fontSize = mid + "px";
+    if (t.scrollWidth <= maxW && t.scrollHeight <= maxH) lo = mid; else hi = mid;
+  }
+  t.style.fontSize = lo + "px";
+}
+addEventListener("resize", () => { if ($("big").classList.contains("show")) fitBig(); });
+$("big").addEventListener("click", (e) => { if (!e.target.closest("#bigFlip")) $("big").classList.remove("show"); });
+$("bigFlip").onclick = () => $("big").classList.toggle("flipped");
+
+// 영어 읽어주기 (읽는 동안 마이크 무음 → 내 기기 소리가 다시 번역되지 않게)
+$("speakBtn").onclick = () => {
+  const txt = $("out").textContent;
+  if (!txt || !("speechSynthesis" in window)) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(txt);
+  u.lang = "en-US"; u.rate = 0.95;
+  const v = speechSynthesis.getVoices().find(x => x.lang === "en-US");
+  if (v) u.voice = v;
+  u.onstart = () => { ttsMute = true; applyMicMute(); };
+  u.onend = u.onerror = () => { setTimeout(() => { ttsMute = false; applyMicMute(); }, 300); };
+  speechSynthesis.speak(u);
+};
+
+// ─────────────────────────────────────────────────────────────
+// 기록 내보내기
+// ─────────────────────────────────────────────────────────────
+const hhmm = (d) => d.toTimeString().slice(0, 8);
+function exportText() {
+  const now = new Date();
+  const a = lines.filter(l => l.ko).map(l => `[${hhmm(l.t)}] ${l.en}\n           → ${l.ko}`).join("\n\n") || "(없음)";
+  const b = mine.map(m => `[${hhmm(m.t)}] ${m.ko}\n           → ${m.en}`).join("\n\n") || "(없음)";
+  return `대화 기록 (BJ 통역) — ${now.toLocaleString("ko-KR")}\n\n■ 상대방 (영→한)\n${a}\n\n■ 나 (한→영)\n${b}\n`;
+}
+function fileName() {
+  const d = new Date(), p = (n) => String(n).padStart(2, "0");
+  return `대화기록_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}.txt`;
+}
+function downloadTxt() {
+  const blob = new Blob([exportText()], { type: "text/plain;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = fileName();
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+$("exportBtn").onclick = async () => {
+  const text = exportText();
+  if (navigator.share) {
+    try {
+      const file = new File([text], fileName(), { type: "text/plain" });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) await navigator.share({ files: [file], title: "대화 기록" });
+      else await navigator.share({ title: "대화 기록", text });
+      return;
+    } catch (e) { if (e.name === "AbortError") return; }
+  }
+  downloadTxt();
+};
+$("saveTxt").onclick = downloadTxt;
+$("clearAll").onclick = () => {
+  if (!confirm("상대방 자막과 내 번역 기록을 모두 지울까요?")) return;
+  lines.length = 0; mine.length = 0; cur = null;
+  $("lines").querySelectorAll(".line").forEach(e => e.remove());
+  $("empty").hidden = false;
+};
+
+// ─────────────────────────────────────────────────────────────
+// 설정 창
+// ─────────────────────────────────────────────────────────────
+function openSettings() {
+  $("apiKey").value = "";
+  $("keyState").textContent = API_KEY ? "저장됨 (…" + API_KEY.slice(-4) + ")" : "미입력";
+  for (const id of ["fs", "split", "pauseS", "nr", "theme", "ctx", "mRt", "mStt", "mTxt"]) $(id).value = S[id];
+  for (const id of ["showEn", "dropKo", "playVoice", "autoTr"]) $(id).checked = S[id];
+  refreshLabels();
+  $("settings").showModal();
+}
+function refreshLabels() {
+  $("fsVal").textContent = S.fs + "px";
+  $("splitVal").textContent = S.split + "%";
+  $("pauseVal").textContent = Number(S.pauseS).toFixed(1) + "초";
+}
+function bindSetting(id, kind) {
+  $(id).addEventListener(kind === "check" ? "change" : "input", () => {
+    const el = $(id);
+    S[id] = kind === "check" ? el.checked : kind === "num" ? Number(el.value) : el.value;
+    if (["mRt", "mStt", "mTxt"].includes(id)) S[id] = el.value.trim();
+    store.set(id, S[id]);
+    refreshLabels(); applyView();
+  });
+}
+["fs", "split", "pauseS"].forEach(id => bindSetting(id, "num"));
+["showEn", "dropKo", "playVoice", "autoTr"].forEach(id => bindSetting(id, "check"));
+["nr", "theme", "ctx", "mRt", "mStt", "mTxt"].forEach(id => bindSetting(id, "text"));
+$("saveKey").onclick = () => {
+  const v = $("apiKey").value.trim();
+  if (!v) return;
+  API_KEY = v; store.set("apiKey", v); $("apiKey").value = "";
+  $("keyState").textContent = "저장됨 (…" + v.slice(-4) + ")";
+};
+$("delKey").onclick = () => { API_KEY = ""; store.del("apiKey"); $("keyState").textContent = "삭제됨"; };
+$("settingsBtn").onclick = openSettings;
+$("closeSettings").onclick = () => $("settings").close();
+$("settings").addEventListener("click", (e) => { if (e.target === $("settings")) $("settings").close(); });
+
+// 시작
+applyView(); updateControls();
+if (!window.isSecureContext) setStatus("HTTPS 주소에서 열어야 마이크를 쓸 수 있습니다");
+else if (!API_KEY) setTimeout(openSettings, 300);
+if ("speechSynthesis" in window) speechSynthesis.getVoices();
+</script>
+</body>
+</html>
