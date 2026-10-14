@@ -82,6 +82,8 @@ main { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .dot.paused { background: var(--muted); }
 
 /* 위: 듣기 */
+#resumeBar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 10px 14px 0; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, #f59e0b 16%, var(--panel)); border: 1px solid color-mix(in srgb, #f59e0b 45%, transparent); font-size: 14px; line-height: 1.45; }
+#resumeBar span { flex: 1; min-width: 180px; }
 .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 2px 14px 10px; border-bottom: 1px solid var(--line); }
 .controls #startBtn { min-width: 128px; height: 44px; }
 .recdot { width: 12px; height: 12px; border-radius: 50%; background: var(--danger); flex: none; }
@@ -191,6 +193,10 @@ input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--accent); f
         <span id="recSaveLabel">녹음 저장</span>
       </button>
     </div>
+    <div id="resumeBar" hidden>
+      <span id="resumeMsg">다른 앱으로 전환되어 듣기를 자동 정지했습니다.</span>
+      <button class="icon-btn primary" id="resumeBtn">다시 시작</button>
+    </div>
     <div id="lines"><div class="empty" id="empty">‘듣기 시작’을 누르면 상대방의 영어를 듣고<br>한국어로 보여줍니다.</div></div>
   </section>
 
@@ -257,6 +263,13 @@ input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--accent); f
       <label class="row">내 한국어 말은 위 창에서 숨기기 <input type="checkbox" id="dropKo"></label>
       <label class="row">번역 음성 듣기 (이어폰 권장) <input type="checkbox" id="playVoice"></label>
       <label class="col">줄바꿈 대기 <span id="pauseVal"></span><input type="range" id="pauseS" min="0.6" max="3" step="0.1"></label>
+      <label class="row">다른 앱으로 전환·화면 꺼짐 시
+        <select id="bgStop" style="width:auto">
+          <option value="now">즉시 정지 (권장)</option>
+          <option value="10">10초 후 정지</option>
+          <option value="off">계속 듣기</option>
+        </select>
+      </label>
       <p class="hint">듣는 동안 1분당 약 $0.034(1시간 약 $2)가 청구되며, 일시정지 중에도 연결이 유지되면 청구됩니다. 다 쓰면 ‘정지’를 누르세요.</p>
     </fieldset>
 
@@ -296,7 +309,7 @@ input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--accent); f
 // ─────────────────────────────────────────────────────────────
 const DEFAULTS = {
   fs: 22, split: 55, showEn: true, theme: "auto",
-  nr: "far_field", dropKo: true, playVoice: false, pauseS: 1.2,
+  nr: "far_field", dropKo: true, playVoice: false, pauseS: 1.2, bgStop: "now",
   autoTr: true, ctx: "",
   mRt: "gpt-realtime-translate", mStt: "gpt-realtime-whisper", mTxt: "gpt-5-mini",
 };
@@ -475,6 +488,7 @@ async function reconnect() {
 
 async function startListening() {
   if (running) return;
+  $("resumeBar").hidden = true;
   if (!API_KEY) { openSettings(); setStatus("먼저 설정에서 API 키를 입력하세요"); return; }
   setStatus("마이크 준비 중…");
   try {
@@ -582,11 +596,34 @@ $("pauseBtn").onclick = () => {
   setStatus(paused ? "일시정지 (요금은 계속 청구됨)" : "듣는 중");
 };
 // 화면이 다시 보이면 화면 꺼짐 방지 재요청 (iOS는 백그라운드에서 해제됨)
+let hiddenAt = 0, bgTimer = null;
+function autoStop(reason) {
+  clearTimeout(bgTimer); bgTimer = null;
+  if (!running) return;
+  const wasRec = !!(recorder && recorder.state === "recording");
+  stopListening(true);
+  $("resumeMsg").textContent = reason + " 듣기를 자동 정지해 요금 청구를 멈췄습니다." +
+    (wasRec ? " 녹음은 ‘녹음 저장’으로 보관하세요." : "");
+  $("resumeBar").hidden = false;
+  setStatus("자동 정지됨");
+}
 document.addEventListener("visibilitychange", async () => {
-  if (document.visibilityState === "visible" && running && "wakeLock" in navigator) {
-    try { wakeLock = await navigator.wakeLock.request("screen"); } catch {}
+  if (document.visibilityState === "hidden") {
+    if (!running || S.bgStop === "off") return;
+    hiddenAt = Date.now();
+    if (S.bgStop === "now") autoStop("다른 앱으로 전환되거나 화면이 꺼져");
+    else bgTimer = setTimeout(() => autoStop("10초 넘게 다른 앱에 있어"), 10000);
+  } else {
+    clearTimeout(bgTimer); bgTimer = null;
+    // 백그라운드에서 타이머가 멈췄던 경우 대비: 돌아온 시점에 경과 시간 확인
+    if (running && S.bgStop === "10" && hiddenAt && Date.now() - hiddenAt > 10000) autoStop("10초 넘게 다른 앱에 있어");
+    hiddenAt = 0;
+    if (running && "wakeLock" in navigator) { try { wakeLock = await navigator.wakeLock.request("screen"); } catch {} }
   }
 });
+// 탭을 닫거나 페이지를 떠날 때는 항상 즉시 연결 종료
+addEventListener("pagehide", () => { if (running) stopListening(true); });
+$("resumeBtn").onclick = () => { $("resumeBar").hidden = true; startListening(); };
 
 // ─────────────────────────────────────────────────────────────
 // 아래 창: 한국어 → 영어 (Chat Completions)
@@ -736,7 +773,7 @@ $("clearAll").onclick = () => {
 function openSettings() {
   $("apiKey").value = "";
   $("keyState").textContent = API_KEY ? "저장됨 (…" + API_KEY.slice(-4) + ")" : "미입력";
-  for (const id of ["fs", "split", "pauseS", "nr", "theme", "ctx", "mRt", "mStt", "mTxt"]) $(id).value = S[id];
+  for (const id of ["fs", "split", "pauseS", "nr", "theme", "ctx", "mRt", "mStt", "mTxt", "bgStop"]) $(id).value = S[id];
   for (const id of ["showEn", "dropKo", "playVoice", "autoTr"]) $(id).checked = S[id];
   refreshLabels();
   $("settings").showModal();
@@ -757,7 +794,7 @@ function bindSetting(id, kind) {
 }
 ["fs", "split", "pauseS"].forEach(id => bindSetting(id, "num"));
 ["showEn", "dropKo", "playVoice", "autoTr"].forEach(id => bindSetting(id, "check"));
-["nr", "theme", "ctx", "mRt", "mStt", "mTxt"].forEach(id => bindSetting(id, "text"));
+["nr", "theme", "ctx", "mRt", "mStt", "mTxt", "bgStop"].forEach(id => bindSetting(id, "text"));
 $("saveKey").onclick = () => {
   const v = $("apiKey").value.trim();
   if (!v) return;
